@@ -1,6 +1,13 @@
 package org.springframework.ai.tool.method;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -12,13 +19,7 @@ import org.springframework.ai.tool.metadata.ToolMetadata;
 import org.springframework.ai.util.json.JsonParser;
 import org.springframework.util.ReflectionUtils;
 
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
  * Unit tests for {@link MethodToolCallback}.
@@ -52,11 +53,11 @@ class MethodToolCallbackTests {
 	void shouldHandleToolContextWhenSupported() {
 		Method toolMethod = getMethod("methodWithToolContext", ToolContextTools.class);
 		MethodToolCallback callback = MethodToolCallback.builder()
-			.toolDefinition(ToolDefinition.from(toolMethod))
-			.toolMetadata(ToolMetadata.from(toolMethod))
-			.toolMethod(toolMethod)
-			.toolObject(new ToolContextTools())
-			.build();
+				.toolDefinition(ToolDefinition.from(toolMethod))
+				.toolMetadata(ToolMetadata.from(toolMethod))
+				.toolMethod(toolMethod)
+				.toolObject(new ToolContextTools())
+				.build();
 
 		ToolContext toolContext = new ToolContext(Map.of("key", "value"));
 		String result = callback.call("""
@@ -72,29 +73,29 @@ class MethodToolCallbackTests {
 	void shouldThrowExceptionWhenToolContextArgumentIsMissing() {
 		Method toolMethod = getMethod("methodWithToolContext", ToolContextTools.class);
 		MethodToolCallback callback = MethodToolCallback.builder()
-			.toolDefinition(ToolDefinition.from(toolMethod))
-			.toolMetadata(ToolMetadata.from(toolMethod))
-			.toolMethod(toolMethod)
-			.toolObject(new PublicTools())
-			.build();
+				.toolDefinition(ToolDefinition.from(toolMethod))
+				.toolMetadata(ToolMetadata.from(toolMethod))
+				.toolMethod(toolMethod)
+				.toolObject(new PublicTools())
+				.build();
 
 		assertThatThrownBy(() -> callback.call("""
 				{
 				    "input": "test"
 				}
 				""")).isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("ToolContext is required by the method as an argument");
+				.hasMessageContaining("ToolContext is required by the method as an argument");
 	}
 
 	@Test
 	void shouldHandleComplexArguments() {
 		Method toolMethod = getMethod("complexArgumentMethod", ComplexTools.class);
 		MethodToolCallback callback = MethodToolCallback.builder()
-			.toolDefinition(ToolDefinition.from(toolMethod))
-			.toolMetadata(ToolMetadata.from(toolMethod))
-			.toolMethod(toolMethod)
-			.toolObject(new ComplexTools())
-			.build();
+				.toolDefinition(ToolDefinition.from(toolMethod))
+				.toolMetadata(ToolMetadata.from(toolMethod))
+				.toolMethod(toolMethod)
+				.toolObject(new ComplexTools())
+				.build();
 
 		String result = callback.call("""
 				{
@@ -113,12 +114,12 @@ class MethodToolCallbackTests {
 	void shouldHandleCustomResultConverter() {
 		Method toolMethod = getMethod("publicMethod", PublicTools.class);
 		MethodToolCallback callback = MethodToolCallback.builder()
-			.toolDefinition(ToolDefinition.from(toolMethod))
-			.toolMetadata(ToolMetadata.from(toolMethod))
-			.toolMethod(toolMethod)
-			.toolObject(new PublicTools())
-			.toolCallResultConverter((result, type) -> "Converted: " + result)
-			.build();
+				.toolDefinition(ToolDefinition.from(toolMethod))
+				.toolMetadata(ToolMetadata.from(toolMethod))
+				.toolMethod(toolMethod)
+				.toolObject(new PublicTools())
+				.toolCallResultConverter((result, type) -> "Converted: " + result)
+				.build();
 
 		String result = callback.call("""
 				{
@@ -133,11 +134,11 @@ class MethodToolCallbackTests {
 	void shouldThrowExceptionWhenToolExecutionFails() {
 		Method toolMethod = getMethod("errorMethod", ErrorTools.class);
 		MethodToolCallback callback = MethodToolCallback.builder()
-			.toolDefinition(ToolDefinition.from(toolMethod))
-			.toolMetadata(ToolMetadata.from(toolMethod))
-			.toolMethod(toolMethod)
-			.toolObject(new ErrorTools())
-			.build();
+				.toolDefinition(ToolDefinition.from(toolMethod))
+				.toolMetadata(ToolMetadata.from(toolMethod))
+				.toolMethod(toolMethod)
+				.toolObject(new ErrorTools())
+				.build();
 
 		assertThatThrownBy(() -> callback.call("""
 				{
@@ -146,15 +147,39 @@ class MethodToolCallbackTests {
 				""")).isInstanceOf(ToolExecutionException.class).hasMessageContaining("Test error");
 	}
 
+	@Test
+	void shouldHandleListWithGenericType() {
+		Method toolMethod = getMethod("methodWithGenericList", GenericListTools.class);
+		MethodToolCallback callback = MethodToolCallback.builder()
+				.toolDefinition(ToolDefinition.from(toolMethod))
+				.toolMetadata(ToolMetadata.from(toolMethod))
+				.toolMethod(toolMethod)
+				.toolObject(new GenericListTools())
+				.build();
+
+		String result = callback.call("""
+				{
+				    "items": [
+				        {"id": 1, "name": "Item 1"},
+				        {"id": 2, "name": "Item 2"}
+				    ]
+				}
+				""");
+
+		assertThat(JsonParser.fromJson(result, new TypeReference<Map<String, Object>>() {
+		})).containsEntry("count", 2)
+				.containsEntry("firstItemName", "Item 1");
+	}
+
 	private static void validateAssertions(String methodName, Object toolObject) {
 		Method toolMethod = getMethod(methodName, toolObject.getClass());
 		assertThat(toolMethod).isNotNull();
 		MethodToolCallback callback = MethodToolCallback.builder()
-			.toolDefinition(ToolDefinition.from(toolMethod))
-			.toolMetadata(ToolMetadata.from(toolMethod))
-			.toolMethod(toolMethod)
-			.toolObject(toolObject)
-			.build();
+				.toolDefinition(ToolDefinition.from(toolMethod))
+				.toolMetadata(ToolMetadata.from(toolMethod))
+				.toolMethod(toolMethod)
+				.toolObject(toolObject)
+				.build();
 
 		String result = callback.call("""
 				{
@@ -168,9 +193,9 @@ class MethodToolCallbackTests {
 
 	private static Method getMethod(String name, Class<?> toolsClass) {
 		return Arrays.stream(ReflectionUtils.getDeclaredMethods(toolsClass))
-			.filter(m -> m.getName().equals(name))
-			.findFirst()
-			.orElseThrow();
+				.filter(m -> m.getName().equals(name))
+				.findFirst()
+				.orElseThrow();
 	}
 
 	static public class PublicTools {
@@ -302,6 +327,18 @@ class MethodToolCallbackTests {
 			throw new IllegalArgumentException("Test error");
 		}
 
+	}
+
+	static class GenericListTools {
+		@Tool(description = "Test description")
+		public Map<String, Object> methodWithGenericList(List<TestItem> items) {
+			return Map.of("count", items.size(), "firstItemName", items.get(0).name);
+		}
+	}
+
+	static class TestItem {
+		public int id;
+		public String name;
 	}
 
 }

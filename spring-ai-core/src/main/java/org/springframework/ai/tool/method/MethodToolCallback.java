@@ -16,7 +16,15 @@
 
 package org.springframework.ai.tool.method;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ToolContext;
@@ -32,12 +40,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.Type;
-import java.util.Map;
-import java.util.stream.Stream;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
  * A {@link ToolCallback} implementation to invoke methods as tools.
@@ -117,7 +120,7 @@ public class MethodToolCallback implements ToolCallback {
 	private void validateToolContextSupport(@Nullable ToolContext toolContext) {
 		var isNonEmptyToolContextProvided = toolContext != null && !CollectionUtils.isEmpty(toolContext.getContext());
 		var isToolContextAcceptedByMethod = Stream.of(toolMethod.getParameterTypes())
-			.anyMatch(type -> ClassUtils.isAssignable(type, ToolContext.class));
+				.anyMatch(type -> ClassUtils.isAssignable(type, ToolContext.class));
 		if (isToolContextAcceptedByMethod && !isNonEmptyToolContextProvided) {
 			throw new IllegalArgumentException("ToolContext is required by the method as an argument");
 		}
@@ -144,6 +147,15 @@ public class MethodToolCallback implements ToolCallback {
 		if (value == null) {
 			return null;
 		}
+		if (type == List.class) {
+			Type genericType = toolMethod.getGenericParameterTypes()[0];
+			if (genericType instanceof ParameterizedType) {
+				Type[] typeArguments = ((ParameterizedType) genericType).getActualTypeArguments();
+				if (typeArguments.length > 0) {
+					return JsonParser.fromJson(JsonParser.toJson(value), genericType);
+				}
+			}
+		}
 		return JsonParser.toTypedObject(value, type);
 	}
 
@@ -156,11 +168,9 @@ public class MethodToolCallback implements ToolCallback {
 		Object result;
 		try {
 			result = toolMethod.invoke(toolObject, methodArguments);
-		}
-		catch (IllegalAccessException ex) {
+		} catch (IllegalAccessException ex) {
 			throw new IllegalStateException("Could not access method: " + ex.getMessage(), ex);
-		}
-		catch (InvocationTargetException ex) {
+		} catch (InvocationTargetException ex) {
 			throw new ToolExecutionException(toolDefinition, ex.getCause());
 		}
 		return result;
